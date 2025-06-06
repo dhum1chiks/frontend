@@ -40,9 +40,9 @@ export default function Login() {
     }
 
     try {
-      console.log('Sending login request to:', 'http://localhost:5000/auth/login');
+      console.log('Sending login request to:', 'https://backend-pink-psi-15.vercel.app/auth/login');
       console.log('Login payload:', form);
-      const res = await axios.post('http://localhost:5000/auth/login', form, { withCredentials: true });
+      const res = await axios.post('https://backend-pink-psi-15.vercel.app/auth/login', form, { withCredentials: true });
       console.log('Login response:', res.data);
       if (res.data.success && res.data.token) {
         localStorage.setItem('token', res.data.token);

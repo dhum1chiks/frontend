@@ -39,7 +39,7 @@ export default function TaskManagerRegister() {
     if (!validateForm()) return;
 
     try {
-      const res = await axios.post('http://localhost:5000/auth/register', form, {
+      const res = await axios.post('https://backend-pink-psi-15.vercel.app/auth/register', form, {
         withCredentials: true,
       });
       if (res.data.success) navigate('/login');

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Menu, X, Plus, Search, Edit, Trash2, UserPlus, Trash } from 'lucide-react';
 
-const API_BASE_URL = 'http://localhost:5000'; // Use proxy path for Vite
+const API_BASE_URL = 'https://backend-pink-psi-15.vercel.app'; // Use proxy path for Vite
 
 const Dashboard = () => {
   const [teams, setTeams] = useState([]);
