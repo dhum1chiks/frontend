@@ -48,6 +48,7 @@ export default function Login() {
     const { token, user } = res.data;
 
     if (token) {
+    	console.log(token)
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(user)); // optional
       navigate('/dashboard');
