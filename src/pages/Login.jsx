@@ -30,34 +30,38 @@ export default function Login() {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setIsLoading(true);
+  e.preventDefault();
+  setError('');
+  setIsLoading(true);
 
-    if (!validateForm()) {
-      setIsLoading(false);
-      return;
-    }
+  if (!validateForm()) {
+    setIsLoading(false);
+    return;
+  }
 
-    try {
-      console.log('Sending login request to:', 'https://backend-xc4z.vercel.app/auth/login');
-      console.log('Login payload:', form);
-      const res = await axios.post('https://backend-xc4z.vercel.app/auth/login', form, { withCredentials: true });
-      console.log('Login response:', res.data);
-      if (res.data.success && res.data.token) {
-        localStorage.setItem('token', res.data.token);
-        console.log('Login Successful, Token Stored:', res.data.token);
-        navigate('/dashboard');
-      } else {
-        setError('Login failed: No token received');
-      }
-    } catch (err) {
-      console.error('Login error:', err.response?.data);
-      setError(err.response?.data?.error || 'Login failed');
-    } finally {
-      setIsLoading(false);
+  try {
+    const res = await axios.post(
+      'https://backend-xc4z.vercel.app/auth/login',
+      form
+    );
+
+    const { token, user } = res.data;
+
+    if (token) {
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify(user)); // optional
+      navigate('/dashboard');
+    } else {
+      setError('Login failed: No token received');
     }
-  };
+  } catch (err) {
+    console.error('Login error:', err.response?.data || err.message);
+    setError(err.response?.data?.error || 'Login failed. Please try again.');
+  } finally {
+    setIsLoading(false);
+  }
+};
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center p-4 sm:p-6 lg:p-8">
