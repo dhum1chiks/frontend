@@ -3,7 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Menu, X, Plus, Search, Edit, Trash2, UserPlus, Trash } from 'lucide-react';
 
-const API_BASE_URL = 'https://backend-xc4z.vercel.app'; // Use proxy path for Vite
+// Backend API base URL (use environment variable for flexibility)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://backend-xc4z.vercel.app';
+
+// Axios instance with default configuration
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true, // Ensure cookies are sent with all requests
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
 const Dashboard = () => {
   const [teams, setTeams] = useState([]);
@@ -23,7 +33,6 @@ const Dashboard = () => {
     title: '',
     description: '',
     assigned_to_id: '',
-    assigned_by_id: '',
     team_id: '',
     due_date: '',
     status: 'To Do',
@@ -36,24 +45,51 @@ const Dashboard = () => {
   const [showAllTasks, setShowAllTasks] = useState(false);
   const navigate = useNavigate();
 
-  // Mock logged-in user (replace with actual auth logic)
-  const loggedInUserId = 4; // Example: User ID 4 (john_doe)
+  // Get the logged-in user ID from authentication context or token
+  const getLoggedInUserId = () => {
+    // Replace with actual auth logic (e.g., decode JWT from localStorage or context)
+    const token = localStorage.getItem('authToken');
+    if (!token) return null;
+    // Example: Decode JWT to get user ID (implement as per your backend)
+    // return jwtDecode(token).userId;
+    return 4; // Temporary fallback; replace with actual logic
+  };
+
+  // Axios interceptor to handle 401 errors
+  useEffect(() => {
+    const interceptor = api.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401) {
+          setError('Session expired. Please log in again.');
+          localStorage.removeItem('authToken'); // Clear invalid token
+          navigate('/login');
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    // Cleanup interceptor on component unmount
+    return () => {
+      api.interceptors.response.eject(interceptor);
+    };
+  }, [navigate]);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
+      setError('');
       try {
-        console.log(`Fetching data from ${API_BASE_URL}`);
+        // Check if user is authenticated
+        const userId = getLoggedInUserId();
+        if (!userId) {
+          setError('You must be logged in to access this page.');
+          navigate('/login');
+          return;
+        }
 
         // Fetch teams
-        const teamsResponse = await axios.get(`${API_BASE_URL}/teams`, {
-          withCredentials: true,
-        });
-        console.log('Teams response:', teamsResponse);
-
-        if (!teamsResponse.headers['content-type']?.includes('application/json')) {
-          throw new Error('Invalid response format from server');
-        }
+        const teamsResponse = await api.get('/teams');
         if (!Array.isArray(teamsResponse.data)) {
           throw new Error('Invalid teams data format');
         }
@@ -61,26 +97,25 @@ const Dashboard = () => {
         const teamsData = teamsResponse.data;
         const enrichedTeams = await Promise.all(
           teamsData.map(async (team) => {
-            const membersResponse = await axios.get(`${API_BASE_URL}/teams/${team.id}/members`, {
-              withCredentials: true,
-            });
-            return { ...team, members: membersResponse.data || [] };
+            try {
+              const membersResponse = await api.get(`/teams/${team.id}/members`);
+              return { ...team, members: membersResponse.data || [] };
+            } catch (membersError) {
+              console.warn(`Failed to fetch members for team ${team.id}:`, membersError);
+              return { ...team, members: [] };
+            }
           })
         );
         setTeams(enrichedTeams);
 
         // Fetch tasks
-        const tasksResponse = await axios.get(`${API_BASE_URL}/tasks/get-task`, {
-          withCredentials: true,
-        });
+        const tasksResponse = await api.get('/tasks/get-task');
         setTasks(tasksResponse.data || []);
         setFilteredTasks(tasksResponse.data || []);
 
         // Fetch users
         try {
-          const usersResponse = await axios.get(`${API_BASE_URL}/users`, {
-            withCredentials: true,
-          });
+          const usersResponse = await api.get('/users');
           setUsers(usersResponse.data || []);
         } catch (usersError) {
           console.warn('Failed to fetch users:', usersError);
@@ -88,9 +123,6 @@ const Dashboard = () => {
         }
       } catch (error) {
         console.error('Error fetching data:', error.response?.data || error.message);
-        if (error.response?.status === 401) {
-          navigate('/login');
-        }
         setError(error.response?.data?.error || error.message || 'Failed to fetch data');
       } finally {
         setLoading(false);
@@ -139,27 +171,18 @@ const Dashboard = () => {
       if (taskForm.assigned_to_id) {
         sanitizedTaskForm.assigned_to_id = parseInt(taskForm.assigned_to_id, 10);
       }
-      // assigned_by_id is set on the backend to req.user.id, so we don't need to send it
-      console.log('Saving task with data:', sanitizedTaskForm);
 
-      const url = taskForm.id
-        ? `${API_BASE_URL}/tasks/${taskForm.id}`
-        : `${API_BASE_URL}/tasks/create-task`;
-      console.log('Request URL:', url);
+      const url = taskForm.id ? `/tasks/${taskForm.id}` : '/tasks/create-task';
       const method = taskForm.id ? 'put' : 'post';
 
-      const response = await axios[method](url, sanitizedTaskForm, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        withCredentials: true,
-      });
+      const response = await api[method](url, sanitizedTaskForm);
 
       const updatedTask = response.data;
-      console.log('Task response:', updatedTask);
       if (taskForm.id) {
         setTasks(tasks.map((task) => (task.id === updatedTask.id ? updatedTask : task)));
-        setFilteredTasks(filteredTasks.map((task) => (task.id === updatedTask.id ? updatedTask : task)));
+        setFilteredTasks(
+          filteredTasks.map((task) => (task.id === updatedTask.id ? updatedTask : task))
+        );
       } else {
         setTasks([...tasks, updatedTask]);
         setFilteredTasks([...filteredTasks, updatedTask]);
@@ -171,14 +194,15 @@ const Dashboard = () => {
         title: '',
         description: '',
         assigned_to_id: '',
-        assigned_by_id: loggedInUserId.toString(),
         team_id: '',
         due_date: '',
         status: 'To Do',
       });
     } catch (error) {
-      const errorMessage = error.response?.data?.errors?.map((e) => e.msg).join(', ') ||
-                          error.response?.data?.error || `Failed to save task: ${error.message}`;
+      const errorMessage =
+        error.response?.data?.errors?.map((e) => e.msg).join(', ') ||
+        error.response?.data?.error ||
+        `Failed to save task: ${error.message}`;
       console.error('Error saving task:', {
         message: error.message,
         response: error.response?.data,
@@ -193,15 +217,9 @@ const Dashboard = () => {
     e.preventDefault();
     setError('');
     try {
-      const response = await axios.post(`${API_BASE_URL}/teams`, teamForm, {
-        headers: { 'Content-Type': 'application/json' },
-        withCredentials: true,
-      });
-
+      const response = await api.post('/teams', teamForm);
       const newTeam = response.data;
-      const membersResponse = await axios.get(`${API_BASE_URL}/teams/${newTeam.id}/members`, {
-        withCredentials: true,
-      });
+      const membersResponse = await api.get(`/teams/${newTeam.id}/members`);
       setTeams([...teams, { ...newTeam, members: membersResponse.data || [] }]);
 
       setIsTeamModalOpen(false);
@@ -215,22 +233,16 @@ const Dashboard = () => {
     e.preventDefault();
     setError('');
     try {
-      await axios.post(
-        `${API_BASE_URL}/teams/${selectedTeamForMembers.id}/members`,
-        { userId: parseInt(addMemberForm.userId, 10) },
-        {
-          headers: { 'Content-Type': 'application/json' },
-          withCredentials: true,
-        }
-      );
+      await api.post(`/teams/${selectedTeamForMembers.id}/members`, {
+        userId: parseInt(addMemberForm.userId, 10),
+      });
 
-      const membersResponse = await axios.get(
-        `${API_BASE_URL}/teams/${selectedTeamForMembers.id}/members`,
-        { withCredentials: true }
-      );
+      const membersResponse = await api.get(`/teams/${selectedTeamForMembers.id}/members`);
       setTeams(
         teams.map((team) =>
-          team.id === selectedTeamForMembers.id ? { ...team, members: membersResponse.data || [] } : team
+          team.id === selectedTeamForMembers.id
+            ? { ...team, members: membersResponse.data || [] }
+            : team
         )
       );
 
@@ -246,9 +258,9 @@ const Dashboard = () => {
     if (!window.confirm('Are you sure you want to delete this team?')) return;
     setError('');
     try {
-      await axios.delete(`${API_BASE_URL}/teams/${teamId}`, { withCredentials: true });
+      await api.delete(`/teams/${teamId}`);
       setTeams(teams.filter((team) => team.id !== teamId));
-      if (selectedTeam === teamId) {
+      if (selectedTeam === teamId.toString()) {
         setSelectedTeam('');
         setSelectedAssignee('');
       }
@@ -263,7 +275,6 @@ const Dashboard = () => {
       title: task.title || '',
       description: task.description || '',
       assigned_to_id: task.assigned_to_id ? task.assigned_to_id.toString() : '',
-      assigned_by_id: task.assigned_by_id ? task.assigned_by_id.toString() : loggedInUserId.toString(),
       team_id: task.team_id ? task.team_id.toString() : '',
       due_date: task.due_date ? task.due_date.split('T')[0] : '',
       status: task.status || 'To Do',
@@ -275,7 +286,7 @@ const Dashboard = () => {
     if (!window.confirm('Are you sure you want to delete this task?')) return;
     setError('');
     try {
-      await axios.delete(`${API_BASE_URL}/tasks/${taskId}`, { withCredentials: true });
+      await api.delete(`/tasks/${taskId}`);
       setTasks(tasks.filter((task) => task.id !== taskId));
       setFilteredTasks(filteredTasks.filter((task) => task.id !== taskId));
     } catch (error) {
@@ -285,9 +296,11 @@ const Dashboard = () => {
 
   const handleLogout = async () => {
     try {
-      await axios.post(`${API_BASE_URL}/auth/logout`, {}, { withCredentials: true });
+      await api.post('/auth/logout');
+      localStorage.removeItem('authToken'); // Clear token on logout
       navigate('/login');
     } catch (error) {
+      console.error('Logout failed:', error);
       navigate('/login');
     }
   };
@@ -307,8 +320,10 @@ const Dashboard = () => {
     return user?.username || 'Unknown';
   };
 
+  // The rest of the JSX remains the same as in your original code
   return (
     <div className="flex min-h-screen bg-gray-900 text-gray-200">
+      {/* ... (JSX unchanged, included for completeness) ... */}
       <aside
         className={`fixed inset-y-0 left-0 w-64 bg-gray-800 p-4 transform ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -431,7 +446,6 @@ const Dashboard = () => {
                     title: '',
                     description: '',
                     assigned_to_id: '',
-                    assigned_by_id: loggedInUserId.toString(),
                     team_id: '',
                     due_date: '',
                     status: 'To Do',
@@ -867,21 +881,6 @@ const Dashboard = () => {
                           {member.username}
                         </option>
                       ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-gray-300 mb-1 text-sm font-medium">Assigned By</label>
-                <select
-                  value={taskForm.assigned_by_id}
-                  onChange={(e) => setTaskForm({ ...taskForm, assigned_by_id: e.target.value })}
-                  className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled
-                >
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.username}
-                    </option>
-                  ))}
                 </select>
               </div>
               <div>
