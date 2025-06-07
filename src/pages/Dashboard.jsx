@@ -3,16 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { Menu, X, Plus, Search, Edit, Trash2, UserPlus, Trash } from 'lucide-react';
 
-// Backend API base URL (use environment variable for flexibility)
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://backend-xc4z.vercel.app';
+const API_BASE_URL = 'https://backend-xc4z.vercel.app';
 
-// Axios instance with default configuration
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  withCredentials: true, // Ensure cookies are sent with all requests
-  headers: {
-    'Content-Type': 'application/json',
-  },
+axios.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
 });
 
 const Dashboard = () => {
@@ -45,91 +43,64 @@ const Dashboard = () => {
   const [showAllTasks, setShowAllTasks] = useState(false);
   const navigate = useNavigate();
 
-  // Get the logged-in user ID from authentication context or token
-  const getLoggedInUserId = () => {
-    // Replace with actual auth logic (e.g., decode JWT from localStorage or context)
-    const token = localStorage.getItem('authToken');
-    if (!token) return null;
-    // Example: Decode JWT to get user ID (implement as per your backend)
-    // return jwtDecode(token).userId;
-    return 4; // Temporary fallback; replace with actual logic
-  };
+  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const loggedInUserId = user.id || null;
 
-  // Axios interceptor to handle 401 errors
   useEffect(() => {
-    const interceptor = api.interceptors.response.use(
-      (response) => response,
-      (error) => {
-        if (error.response?.status === 401) {
-          setError('Session expired. Please log in again.');
-          localStorage.removeItem('authToken'); // Clear invalid token
-          navigate('/login');
-        }
-        return Promise.reject(error);
-      }
-    );
-
-    // Cleanup interceptor on component unmount
-    return () => {
-      api.interceptors.response.eject(interceptor);
-    };
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/login');
+    }
   }, [navigate]);
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!loggedInUserId) {
+        setError('User not authenticated');
+        navigate('/login');
+        return;
+      }
       setLoading(true);
-      setError('');
       try {
-        // Check if user is authenticated
-        const userId = getLoggedInUserId();
-        if (!userId) {
-          setError('You must be logged in to access this page.');
-          navigate('/login');
-          return;
-        }
-
-        // Fetch teams
-        const teamsResponse = await api.get('/teams');
+        const teamsResponse = await axios.get(`${API_BASE_URL}/teams`);
         if (!Array.isArray(teamsResponse.data)) {
           throw new Error('Invalid teams data format');
         }
-
         const teamsData = teamsResponse.data;
         const enrichedTeams = await Promise.all(
           teamsData.map(async (team) => {
-            try {
-              const membersResponse = await api.get(`/teams/${team.id}/members`);
-              return { ...team, members: membersResponse.data || [] };
-            } catch (membersError) {
-              console.warn(`Failed to fetch members for team ${team.id}:`, membersError);
-              return { ...team, members: [] };
-            }
+            const membersResponse = await axios.get(`${API_BASE_URL}/teams/${team.id}/members`);
+            return { ...team, members: membersResponse.data || [] };
           })
         );
         setTeams(enrichedTeams);
 
-        // Fetch tasks
-        const tasksResponse = await api.get('/tasks/get-task');
+        const tasksResponse = await axios.get(`${API_BASE_URL}/tasks`);
         setTasks(tasksResponse.data || []);
         setFilteredTasks(tasksResponse.data || []);
 
-        // Fetch users
         try {
-          const usersResponse = await api.get('/users');
-          setUsers(usersResponse.data || []);
+          const usersResponse = await axios.get(`${API_BASE_URL}/users`);
+          setUsers(usersResponse.data.users || []);
         } catch (usersError) {
           console.warn('Failed to fetch users:', usersError);
           setUsers([]);
+          setError('Failed to fetch users; some assignees may appear as unknown');
         }
       } catch (error) {
         console.error('Error fetching data:', error.response?.data || error.message);
-        setError(error.response?.data?.error || error.message || 'Failed to fetch data');
+        if (error.response?.status === 401) {
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          navigate('/login');
+        }
+        setError(error.response?.data?.error || 'Failed to fetch data');
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [navigate]);
+  }, [navigate, loggedInUserId]);
 
   useEffect(() => {
     let filtered = tasks;
@@ -171,11 +142,12 @@ const Dashboard = () => {
       if (taskForm.assigned_to_id) {
         sanitizedTaskForm.assigned_to_id = parseInt(taskForm.assigned_to_id, 10);
       }
-
-      const url = taskForm.id ? `/tasks/${taskForm.id}` : '/tasks/create-task';
+      const url = taskForm.id ? `${API_BASE_URL}/tasks/${taskForm.id}` : `${API_BASE_URL}/tasks`;
       const method = taskForm.id ? 'put' : 'post';
 
-      const response = await api[method](url, sanitizedTaskForm);
+      const response = await axios[method](url, sanitizedTaskForm, {
+        headers: { 'Content-Type': 'application/json' },
+      });
 
       const updatedTask = response.data;
       if (taskForm.id) {
@@ -217,9 +189,12 @@ const Dashboard = () => {
     e.preventDefault();
     setError('');
     try {
-      const response = await api.post('/teams', teamForm);
+      const response = await axios.post(`${API_BASE_URL}/teams`, teamForm, {
+        headers: { 'Content-Type': 'application/json' },
+      });
+
       const newTeam = response.data;
-      const membersResponse = await api.get(`/teams/${newTeam.id}/members`);
+      const membersResponse = await axios.get(`${API_BASE_URL}/teams/${newTeam.id}/members`);
       setTeams([...teams, { ...newTeam, members: membersResponse.data || [] }]);
 
       setIsTeamModalOpen(false);
@@ -233,11 +208,15 @@ const Dashboard = () => {
     e.preventDefault();
     setError('');
     try {
-      await api.post(`/teams/${selectedTeamForMembers.id}/members`, {
-        userId: parseInt(addMemberForm.userId, 10),
-      });
+      await axios.post(
+        `${API_BASE_URL}/teams/${selectedTeamForMembers.id}/members`,
+        { userId: parseInt(addMemberForm.userId, 10) },
+        { headers: { 'Content-Type': 'application/json' } }
+      );
 
-      const membersResponse = await api.get(`/teams/${selectedTeamForMembers.id}/members`);
+      const membersResponse = await axios.get(
+        `${API_BASE_URL}/teams/${selectedTeamForMembers.id}/members`
+      );
       setTeams(
         teams.map((team) =>
           team.id === selectedTeamForMembers.id
@@ -255,10 +234,10 @@ const Dashboard = () => {
   };
 
   const handleDeleteTeam = async (teamId) => {
-    if (!window.confirm('Are you sure you want to delete this team?')) return;
+    if (!confirm('Are you sure you want to delete this team?')) return;
     setError('');
     try {
-      await api.delete(`/teams/${teamId}`);
+      await axios.delete(`${API_BASE_URL}/teams/${teamId}`);
       setTeams(teams.filter((team) => team.id !== teamId));
       if (selectedTeam === teamId.toString()) {
         setSelectedTeam('');
@@ -283,12 +262,12 @@ const Dashboard = () => {
   };
 
   const handleDeleteTask = async (taskId) => {
-    if (!window.confirm('Are you sure you want to delete this task?')) return;
+    if (!confirm('Are you sure you want to delete this task?')) return;
     setError('');
     try {
-      await api.delete(`/tasks/${taskId}`);
+      await axios.delete(`${API_BASE_URL}/tasks/${taskId}`);
       setTasks(tasks.filter((task) => task.id !== taskId));
-      setFilteredTasks(filteredTasks.filter((task) => task.id !== taskId));
+      setFilteredTasks(tasks.filter((task) => task.id !== taskId));
     } catch (error) {
       setError(error.response?.data?.error || 'Failed to delete task');
     }
@@ -296,11 +275,13 @@ const Dashboard = () => {
 
   const handleLogout = async () => {
     try {
-      await api.post('/auth/logout');
-      localStorage.removeItem('authToken'); // Clear token on logout
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
       navigate('/login');
     } catch (error) {
-      console.error('Logout failed:', error);
+      console.error('Logout error:', error);
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
       navigate('/login');
     }
   };
@@ -313,21 +294,18 @@ const Dashboard = () => {
     ).values()
   );
 
-  const getAssigneeName = (task, field = 'assigned_to_id') => {
-    const userId = task[field];
+  const getAssigneeName = (userId) => {
     if (!userId) return 'Unassigned';
     const user = users.find((u) => u.id === userId);
     return user?.username || 'Unknown';
   };
 
-  // The rest of the JSX remains the same as in your original code
   return (
     <div className="flex min-h-screen bg-gray-900 text-gray-200">
-      {/* ... (JSX unchanged, included for completeness) ... */}
       <aside
         className={`fixed inset-y-0 left-0 w-64 bg-gray-800 p-4 transform ${
           isSidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } md:relative md:translate-x-0 transition-transform duration-300 ease-in-out z-30 overflow-y-auto`}
+        } md:relative md:translate-x-0 transition-transform duration-300 ease-in-out z-50 overflow-y-auto`}
       >
         <button className="md:hidden mb-4" onClick={() => setIsSidebarOpen(false)}>
           <X className="w-6 h-6 text-gray-300" />
@@ -384,7 +362,7 @@ const Dashboard = () => {
 
       {isSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden"
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
           onClick={() => setIsSidebarOpen(false)}
         ></div>
       )}
@@ -392,7 +370,7 @@ const Dashboard = () => {
       <div className="flex-1 flex flex-col">
         <header className="sticky top-0 bg-gray-800 shadow p-4 z-10">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div className="flex items-center justify-between sm:flex-1 sm:mr-4">
+            <div className="flex items-center sm:flex-1 sm:mr-4">
               <button className="md:hidden" onClick={() => setIsSidebarOpen(true)}>
                 <Menu className="w-6 h-6 text-gray-300" />
               </button>
@@ -407,7 +385,7 @@ const Dashboard = () => {
                 />
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 w-full sm:w-auto">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3 w-full sm:w-auto">
               <select
                 value={selectedTeam}
                 onChange={(e) => {
@@ -493,16 +471,18 @@ const Dashboard = () => {
           {error && (
             <div className="mb-4 p-4 bg-red-900 border-l-4 border-red-500 rounded-r-lg text-red-200 text-sm">
               {error}
-              <button onClick={() => setError('')} className="ml-2 text-red-200 hover:text-red-100">
+              <button onClick={() => setError('')} className="ml-2 text-sm text-red-200 hover:text-red-100">
                 Dismiss
               </button>
             </div>
           )}
-          {loading && <div className="text-center text-gray-400 text-sm">Loading...</div>}
+          {loading && <p className="text-center text-gray-400 text-sm">Loading...</p>}
           <div className="mb-8">
             <h2 className="text-xl sm:text-2xl font-bold text-gray-200 mb-4">Teams</h2>
             {teams.length === 0 && !loading ? (
-              <div className="text-center text-gray-400 text-sm">No teams found. Create a team to get started.</div>
+              <div className="text-center text-gray-400 text-sm">
+                No teams found. Create a team to get started.
+              </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {teams.map((team) => (
@@ -533,7 +513,7 @@ const Dashboard = () => {
                         ))}
                         {team.members?.length > 3 && (
                           <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gray-600 flex items-center justify-center text-white text-xs font-medium border-2 border-gray-800">
-                            +{(team.members.length - 3)}
+                            +{team.members.length - 3}
                           </div>
                         )}
                       </div>
@@ -564,7 +544,7 @@ const Dashboard = () => {
               <div className="mt-6">
                 <h3 className="text-lg font-semibold text-gray-200 mb-2">All Teams in Database</h3>
                 {teams.length === 0 ? (
-                  <div className="text-gray-400 text-sm">No teams available in the database.</div>
+                  <div className="text-gray-400 text-sm">No teams found in the database.</div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {teams.map((team) => (
@@ -589,7 +569,7 @@ const Dashboard = () => {
 
           <div>
             <h2 className="text-xl sm:text-2xl font-bold text-gray-200 mb-4">
-              Tasks {selectedTeam && `- ${teams.find((t) => t.id === parseInt(selectedTeam, 10))?.name}`}
+              Tasks {selectedTeam && `- ${teams.find((t) => t.id === parseInt(selectedTeam, 10))?.name || 'N/A'}`}
             </h2>
             <div className="hidden sm:block">
               <div className="bg-gray-800 rounded-lg shadow overflow-x-auto">
@@ -634,10 +614,10 @@ const Dashboard = () => {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-200">
-                          {getAssigneeName(task, 'assigned_to_id')}
+                          {getAssigneeName(task.assigned_to_id)}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-200">
-                          {getAssigneeName(task, 'assigned_by_id')}
+                          {getAssigneeName(task.assigned_by_id)}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-200">
                           {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'N/A'}
@@ -685,10 +665,10 @@ const Dashboard = () => {
                       {teams.find((t) => t.id === task.team_id)?.name || 'N/A'}
                     </span>
                     <span className="text-sm text-gray-400">
-                      Assigned To: {getAssigneeName(task, 'assigned_to_id')}
+                      Assigned To: {getAssigneeName(task.assigned_to_id)}
                     </span>
                     <span className="text-sm text-gray-400">
-                      Assigned By: {getAssigneeName(task, 'assigned_by_id')}
+                      Assigned By: {getAssigneeName(task.assigned_by_id)}
                     </span>
                     <span className="text-sm text-gray-400">
                       Due Date: {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'N/A'}
@@ -728,84 +708,82 @@ const Dashboard = () => {
             {filteredTasks.length === 0 && !loading && (
               <div className="text-center py-12">
                 <div className="text-gray-400 text-base sm:text-lg">No tasks found</div>
-                <p className="text-gray-500 mt-2 text-sm">
+                <span className="text-gray-500 text-sm">
                   {searchQuery || selectedTeam || selectedAssignee
                     ? 'Try adjusting your filters'
                     : 'Create your first task to get started'}
-                </p>
+                </span>
               </div>
             )}
             {showAllTasks && (
               <div className="mt-6">
-                <h3 className="text-lg font-semibold text-gray-200 mb-2">All Tasks in Database</h3>
-                <div className="bg-gray-800 rounded-lg shadow overflow-x-auto">
-                  <table className="w-full min-w-[640px]">
-                    <thead className="bg-gray-700">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          Task
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          Team
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          Assigned To
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          Assigned By
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          Due Date
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          Status
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-gray-800 divide-y divide-gray-700">
-                      {tasks.map((task) => (
-                        <tr key={task.id} className="hover:bg-gray-700">
-                          <td className="px-4 py-3">
-                            <div>
-                              <div className="text-sm font-medium text-gray-200">{task.title}</div>
-                              <div className="text-xs text-gray-400">{task.description}</div>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-900 text-blue-200">
-                              {teams.find((t) => t.id === task.team_id)?.name || 'N/A'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-200">
-                            {getAssigneeName(task, 'assigned_to_id')}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-200">
-                            {getAssigneeName(task, 'assigned_by_id')}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-200">
-                            {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'N/A'}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span
-                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                task.status === 'Done'
-                                  ? 'bg-green-900 text-green-200'
-                                  : task.status === 'In Progress'
-                                  ? 'bg-yellow-900 text-yellow-200'
-                                  : 'bg-red-900 text-red-200'
-                              }`}
-                            >
-                              {task.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <h3 className="text-lg font-semibold text-gray-200 mb-2">All Tasks</h3>
+                <div className="bg-gray-800 rounded-lg shadow-lg overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-700">
+                        <thead className="bg-gray-200">
+                            <tr>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
+                                    Task
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
+                                    Team
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
+                                    Assigned To
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
+                                    Assigned By
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
+                                    Due Date
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-semibold text-gray-900 uppercase tracking-wider">
+                                    Status
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody className="bg-gray-800 divide-y divide-gray-700">
+                            {tasks.map((task) => (
+                                <tr key={task.id} className="hover:bg-gray-700">
+                                    <td className="px-4 py-4 whitespace-nowrap">
+                                        <div className="text-sm font-medium text-gray-200">{task.title}</div>
+                                        <div className="text-xs text-gray-500">{task.description}</div>
+                                    </td>
+                                    <td className="px-4 py-4 whitespace-nowrap">
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold text-blue-500 bg-blue-200">
+                                            {teams.find((t) => t.id === task.team_id)?.name || ''}
+                                        </span>
+                                    </td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-200">
+                                        {getAssigneeName(task.assigned_to_id)}
+                                    </td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-200">
+                                        {getAssigneeName(task.assigned_by_id)}
+                                    </td>
+                                    <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-200">
+                                        {task.due_date ? new Date(task.due_date).toLocaleDateString() : ''}
+                                    </td>
+                                    <td className="px-4 py-4 whitespace-nowrap">
+                                        <span
+                                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                                task.status === 'Done'
+                                                    ? 'bg-green-200 text-green-900'
+                                                    : task.status === 'In Progress'
+                                                    ? 'bg-yellow-200 text-yellow-900'
+                                                    : 'bg-red-200 text-red-900'
+                                            }`}
+                                        >
+                                            {task.status}
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
                 <button
                   onClick={() => setShowAllTasks(false)}
-                  className="mt-4 px-3 py-1 bg-gray-600 text-white rounded-md hover:bg-gray-700 text-sm"
+                  className="mt-4 px-3 py-1 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors text-sm"
                 >
                   Hide All Tasks
                 </button>
@@ -813,211 +791,215 @@ const Dashboard = () => {
             )}
           </div>
         </main>
-      </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40 p-4">
-          <div className="bg-gray-800 p-6 rounded-lg w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-200">
-                {taskForm.id ? 'Edit Task' : 'Create Task'}
-              </h2>
-              <button onClick={() => setIsModalOpen(false)}>
-                <X className="w-6 h-6 text-gray-300" />
-              </button>
-            </div>
-            <form onSubmit={handleTaskSubmit} className="space-y-4">
-              <div>
-                <label className="block text-gray-300 mb-1 text-sm font-medium">Title</label>
-                <input
-                  type="text"
-                  value={taskForm.title}
-                  onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
-                  className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-gray-300 mb-1 text-sm font-medium">Description</label>
-                <textarea
-                  value={taskForm.description}
-                  onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
-                  className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  rows="3"
-                />
-              </div>
-              <div>
-                <label className="block text-gray-300 mb-1 text-sm font-medium">Team</label>
-                <select
-                  value={taskForm.team_id}
-                  onChange={(e) => setTaskForm({ ...taskForm, team_id: e.target.value, assigned_to_id: '' })}
-                  className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="">Select Team</option>
-                  {teams.map((team) => (
-                    <option key={team.id} value={team.id}>
-                      {team.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-gray-300 mb-1 text-sm font-medium">Assigned To</label>
-                <select
-                  value={taskForm.assigned_to_id}
-                  onChange={(e) => setTaskForm({ ...taskForm, assigned_to_id: e.target.value })}
-                  className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  disabled={!taskForm.team_id}
-                >
-                  <option value="">
-                    {taskForm.team_id ? 'Select Assignee' : 'Please select a team first'}
-                  </option>
-                  {taskForm.team_id &&
-                    teams
-                      .find((t) => t.id === parseInt(taskForm.team_id, 10))
-                      ?.members?.map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {member.username}
-                        </option>
-                      ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-gray-300 mb-1 text-sm font-medium">Status</label>
-                <select
-                  value={taskForm.status}
-                  onChange={(e) => setTaskForm({ ...taskForm, status: e.target.value })}
-                  className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="To Do">To Do</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Done">Done</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-gray-300 mb-1 text-sm font-medium">Due Date</label>
-                <input
-                  type="date"
-                  value={taskForm.due_date}
-                  onChange={(e) => setTaskForm({ ...taskForm, due_date: e.target.value })}
-                  className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="flex justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded bg-gray-200 text-gray-800 hover:bg-gray-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded bg-blue-500 text-white hover:bg-blue-600"
-                >
-                  {taskForm.id ? 'Update Task' : 'Create Task'}
+        {isModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 p-6 rounded-lg w-full max-w-md">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold text-gray-200">
+                  {taskForm.id ? 'Edit Task' : 'Create Task'}
+                </h2>
+                <button onClick={() => setIsModalOpen(false)}>
+                  <X className="w-6 h-6 text-gray-300" />
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {isTeamModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 p-6 rounded-lg w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-200">Create Team</h2>
-              <button onClick={() => setIsTeamModalOpen(false)}>
-                <X className="w-6 h-6 text-gray-300" />
-              </button>
-            </div>
-            <form onSubmit={handleTeamSubmit} className="space-y-4">
-              <div>
-                <label className="block text-gray-300 mb-1 text-sm font-medium">Team Name</label>
-                <input
-                  type="text"
-                  value={teamForm.name}
-                  onChange={(e) => setTeamForm({ name: e.target.value })}
-                  className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                />
-              </div>
-              <div className="flex justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setIsTeamModalOpen(false)}
-                  className="px-4 py-2 rounded bg-gray-200 text-gray-800 hover:bg-gray-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded bg-blue-500 text-white hover:bg-blue-600"
-                >
-                  Create Team
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {isAddMemberModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 p-6 rounded-lg w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-semibold text-gray-200">
-                Add Member to {selectedTeamForMembers?.name}
-              </h2>
-              <button onClick={() => setIsAddMemberModalOpen(false)}>
-                <X className="w-6 h-6 text-gray-300" />
-              </button>
-            </div>
-            <form onSubmit={handleAddMemberSubmit} className="space-y-4">
-              <div>
-                <label className="block text-gray-300 mb-1 text-sm font-medium">Select User</label>
-                <select
-                  value={addMemberForm.userId}
-                  onChange={(e) => setAddMemberForm({ userId: e.target.value })}
-                  className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  required
-                >
-                  <option value="">Select User</option>
-                  {users
-                    .filter(
-                      (user) =>
-                        !(selectedTeamForMembers?.members || []).some((member) => member.id === user.id)
-                    )
-                    .map((user) => (
-                      <option key={user.id} value={user.id}>
-                        {user.username}
+              <form onSubmit={handleTaskSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Title</label>
+                  <input
+                    type="text"
+                    value={taskForm.title}
+                    onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
+                    className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Description</label>
+                  <textarea
+                    value={taskForm.description}
+                    onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
+                    className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="3"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Team</label>
+                  <select
+                    value={taskForm.team_id}
+                    onChange={(e) => setTaskForm({ ...taskForm, team_id: e.target.value, assigned_to_id: '' })}
+                    className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Select Team</option>
+                    {teams.map((team) => (
+                      <option key={team.id} value={team.id}>
+                        {team.name}
                       </option>
                     ))}
-                </select>
-              </div>
-              <div className="flex justify-end space-x-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAddMemberModalOpen(false)}
-                  className="px-4 py-2 rounded bg-gray-200 text-gray-800 hover:bg-gray-300"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded bg-blue-500 text-white hover:bg-blue-600"
-                >
-                  Add Member
-                </button>
-              </div>
-            </form>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Assigned To</label>
+                  <select
+                    value={taskForm.assigned_to_id}
+                    onChange={(e) => setTaskForm({ ...taskForm, assigned_to_id: e.target.value })}
+                    className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={!taskForm.team_id}
+                  >
+                    <option value="">
+                      {taskForm.team_id ? 'Select Assignee' : 'Please select a team first'}
+                    </option>
+                    {taskForm.team_id &&
+                      teams
+                        .find((t) => t.id === parseInt(taskForm.team_id, 10))
+                        ?.members?.map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.username}
+                          </option>
+                        ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Status</label>
+                  <select
+                    value={taskForm.status}
+                    onChange={(e) => setTaskForm({ ...taskForm, status: e.target.value })}
+                    className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="To Do">To Do</option>
+                    <option value="In Progress">In Progress</option>
+                    <option value="Done">Done</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Due Date</label>
+                  <input
+                    type="date"
+                    value={taskForm.due_date}
+                    onChange={(e) => setTaskForm({ ...taskForm, due_date: e.target.value })}
+                    className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                {error && <div className="text-red-400 text-sm">{error}</div>}
+                <div className="flex justify-end space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-4 py-2 rounded bg-gray-600 text-gray-200 hover:bg-gray-700"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded bg-blue-500 text-white hover:bg-blue-600"
+                  >
+                    {taskForm.id ? 'Update Task' : 'Create Task'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {isTeamModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 p-6 rounded-lg w-full max-w-md">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold text-gray-200">Create Team</h2>
+                <button onClick={() => setIsTeamModalOpen(false)}>
+                  <X className="w-6 h-6 text-gray-300" />
+                </button>
+              </div>
+              <form onSubmit={handleTeamSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Team Name</label>
+                  <input
+                    type="text"
+                    value={teamForm.name}
+                    onChange={(e) => setTeamForm({ name: e.target.value })}
+                    className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                {error && <div className="text-red-400 text-sm">{error}</div>}
+                <div className="flex justify-end space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsTeamModalOpen(false)}
+                    className="px-4 py-2 rounded bg-gray-600 text-gray-200 hover:bg-gray-700"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded bg-blue-500 text-white hover:bg-blue-600"
+                  >
+                    Create Team
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {isAddMemberModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 p-6 rounded-lg w-full max-w-md">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-semibold text-gray-200">
+                  Add Member to {selectedTeamForMembers?.name || ''}
+                </h2>
+                <button onClick={() => setIsAddMemberModalOpen(false)}>
+                  <X className="w-6 h-6 text-gray-300" />
+                </button>
+              </div>
+              <form onSubmit={handleAddMemberSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-1">Select User</label>
+                  <select
+                    value={addMemberForm.userId}
+                    onChange={(e) => setAddMemberForm({ userId: e.target.value })}
+                    className="w-full p-2 rounded bg-gray-700 border border-gray-600 text-gray-200 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  >
+                    <option value="">Select User</option>
+                    {users
+                      .filter(
+                        (user) =>
+                          !(selectedTeamForMembers?.members || []).some((member) => member.id === user.id)
+                      )
+                      .map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.username}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                {error && <div className="text-red-400 text-sm">{error}</div>}
+                <div className="flex justify-end space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddMemberModalOpen(false)}
+                    className="px-4 py-2 rounded bg-gray-600 text-gray-200 hover:bg-gray-700"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded bg-blue-500 text-white hover:bg-blue-600"
+                  >
+                    Add Member
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
 
 export default Dashboard;
+

@@ -1,11 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, CheckSquare, ArrowRight, Shield } from 'lucide-react';
 
+// Set up Axios interceptor to include token in all requests
+axios.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export default function Login() {
   const [form, setForm] = useState({ email: '', password: '' });
-  const [error, setError] = useState('');
+  const [errors, setErrors] = useState([]);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -14,55 +23,49 @@ export default function Login() {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm({ ...form, [name]: value });
-    if (error) setError('');
+    if (errors.length) setErrors([]);
   };
 
   const validateForm = () => {
+    const newErrors = [];
     if (!form.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      setError('Please enter a valid email address');
-      return false;
+      newErrors.push('Please enter a valid email address');
     }
     if (!form.password || form.password.length < 6) {
-      setError('Password must be at least 6 characters long');
-      return false;
+      newErrors.push('Password must be at least 6 characters long');
     }
-    return true;
+    setErrors(newErrors);
+    return newErrors.length === 0;
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setError('');
-  setIsLoading(true);
+    e.preventDefault();
+    setErrors([]);
+    setIsLoading(true);
 
-  if (!validateForm()) {
-    setIsLoading(false);
-    return;
-  }
-
-  try {
-    const res = await axios.post(
-      'https://backend-xc4z.vercel.app/auth/login',
-      form
-    );
-
-    const { token, user } = res.data;
-
-    if (token) {
-    	console.log(token)
-      localStorage.setItem('token', token);
-      localStorage.setItem('user', JSON.stringify(user)); // optional
-      navigate('/dashboard');
-    } else {
-      setError('Login failed: No token received');
+    if (!validateForm()) {
+      setIsLoading(false);
+      return;
     }
-  } catch (err) {
-    console.error('Login error:', err.response?.data || err.message);
-    setError(err.response?.data?.error || 'Login failed. Please try again.');
-  } finally {
-    setIsLoading(false);
-  }
-};
 
+    try {
+      const res = await axios.post('https://backend-xc4z.vercel.app/auth/login', form);
+
+      const { token, user } = res.data;
+      if (token) {
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(user)); // Optional
+        navigate('/dashboard');
+      } else {
+        setErrors(['Login failed: No token received']);
+      }
+    } catch (err) {
+      console.error('Login error:', err.response?.data || err.message);
+      setErrors([err.response?.data?.error || 'Login failed. Please try again.']);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center p-4 sm:p-6 lg:p-8">
@@ -88,11 +91,15 @@ export default function Login() {
             <p className="text-sm sm:text-base text-gray-600">Sign in to manage your tasks</p>
           </div>
 
-          {error && (
+          {errors.length > 0 && (
             <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-400 rounded-r-lg">
               <div className="flex items-center">
                 <Shield className="w-5 h-5 text-red-400 mr-2" />
-                <p className="text-red-700 text-sm">{error}</p>
+                <ul className="text-red-700 text-sm">
+                  {errors.map((error, index) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
               </div>
             </div>
           )}
@@ -114,6 +121,7 @@ export default function Login() {
                   value={form.email}
                   onChange={handleChange}
                   required
+                  disabled={isLoading}
                 />
               </div>
             </div>
@@ -134,6 +142,7 @@ export default function Login() {
                   value={form.password}
                   onChange={handleChange}
                   required
+                  disabled={isLoading}
                 />
                 <button
                   type="button"
@@ -150,12 +159,14 @@ export default function Login() {
                 <input
                   type="checkbox"
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 focus:ring-2"
+                  disabled
                 />
                 <span className="ml-2 text-sm text-gray-600">Remember me</span>
               </label>
               <button
                 type="button"
                 className="text-sm text-blue-600 hover:text-blue-700 transition-colors"
+                disabled
               >
                 Forgot password?
               </button>
