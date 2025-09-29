@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { Play, Pause, Clock, Trash2 } from 'lucide-react';
 
 const API_BASE_URL = 'https://backend-xc4z.vercel.app';
 
-const TimeTracker = ({ taskId, taskTitle }) => {
+const TimeTracker = ({ taskId }) => {
   const [timeLogs, setTimeLogs] = useState([]);
   const [totalTime, setTotalTime] = useState({ minutes: 0, hours: 0 });
   const [activeTimer, setActiveTimer] = useState(null);
@@ -16,7 +16,7 @@ const TimeTracker = ({ taskId, taskTitle }) => {
   useEffect(() => {
     fetchTimeLogs();
     fetchActiveTimer();
-  }, [taskId]);
+  }, [taskId, fetchTimeLogs, fetchActiveTimer]);
 
   useEffect(() => {
     let interval;
@@ -31,7 +31,7 @@ const TimeTracker = ({ taskId, taskTitle }) => {
     return () => clearInterval(interval);
   }, [activeTimer]);
 
-  const fetchTimeLogs = async () => {
+  const fetchTimeLogs = useCallback(async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/tasks/${taskId}/time`, { withCredentials: true });
       setTimeLogs(res.data.logs);
@@ -39,9 +39,9 @@ const TimeTracker = ({ taskId, taskTitle }) => {
     } catch (err) {
       console.error('Failed to fetch time logs:', err);
     }
-  };
+  }, [taskId]);
 
-  const fetchActiveTimer = async () => {
+  const fetchActiveTimer = useCallback(async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/tasks/time/active`, { withCredentials: true });
       if (res.data && res.data.task_id === taskId) {
@@ -52,7 +52,7 @@ const TimeTracker = ({ taskId, taskTitle }) => {
     } catch (err) {
       console.error('Failed to fetch active timer:', err);
     }
-  };
+  }, [taskId]);
 
   const startTimer = async () => {
     setLoading(true);

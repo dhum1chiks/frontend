@@ -3,7 +3,7 @@ import axios from 'axios';
 
 const API_BASE_URL = 'https://backend-xc4z.vercel.app';
 
-const TaskModal = ({ isOpen, onClose, onSubmit, taskForm, setTaskForm, users, teams }) => {
+const TaskModal = ({ isOpen, onClose, onSubmit, taskForm, setTaskForm, teams }) => {
   const [files, setFiles] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [milestones, setMilestones] = useState([]);

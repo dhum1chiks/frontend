@@ -85,7 +85,7 @@ const UserProfile = ({ isOpen, onClose }) => {
       }
 
       // Update profile - only send updatable fields (include avatar_url if it was just uploaded)
-      const { id, username, email, ...profileData } = profile;
+      const { ...profileData } = profile;
       await axios.put(`${API_BASE_URL}/users/profile`, profileData, { withCredentials: true });
 
       // Refresh profile data to get updated avatar_url from database

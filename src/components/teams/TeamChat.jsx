@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import Pusher from 'pusher-js';
 import { Send, Trash2, MessageCircle } from 'lucide-react';
@@ -10,15 +10,13 @@ const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [pusher, setPusher] = useState(null);
-  const [channel, setChannel] = useState(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
     if (isOpen && team) {
       fetchMessages();
     }
-  }, [isOpen, team]);
+  }, [isOpen, team, fetchMessages]);
 
   useEffect(() => {
     if (isOpen && team) {
@@ -43,8 +41,6 @@ const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
         setMessages(prev => prev.filter(msg => msg.id !== data.messageId));
       });
 
-      setPusher(pusherInstance);
-      setChannel(teamChannel);
 
       return () => {
         if (teamChannel) {
@@ -66,14 +62,14 @@ const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/teams/${team.id}/messages`, { withCredentials: true });
       setMessages(res.data);
     } catch (err) {
       console.error('Failed to fetch messages:', err);
     }
-  };
+  }, [team?.id]);
 
   const handleSendMessage = async (e) => {
     e.preventDefault();

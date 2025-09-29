@@ -31,16 +31,10 @@ const TimeReport = ({ isOpen, onClose }) => {
   };
 
   const fetchTimeReport = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        startDate: dateRange.startDate,
-        endDate: dateRange.endDate,
-        ...(selectedTeam && { teamId: selectedTeam })
-      });
-
-      // Since we don't have a dedicated report endpoint, we'll fetch tasks and their time logs
-      const tasksRes = await axios.get(`${API_BASE_URL}/tasks/get-task?${selectedTeam ? `team_id=${selectedTeam}` : ''}`, { withCredentials: true });
+   setLoading(true);
+   try {
+     // Since we don't have a dedicated report endpoint, we'll fetch tasks and their time logs
+     const tasksRes = await axios.get(`${API_BASE_URL}/tasks/get-task?${selectedTeam ? `team_id=${selectedTeam}` : ''}`, { withCredentials: true });
       const tasks = tasksRes.data;
 
       const timePromises = tasks.map(async (task) => {
@@ -50,7 +44,7 @@ const TimeReport = ({ isOpen, onClose }) => {
             ...task,
             timeData: timeRes.data
           };
-        } catch (err) {
+        } catch {
           return { ...task, timeData: { logs: [], totalMinutes: 0, totalHours: 0 } };
         }
       });

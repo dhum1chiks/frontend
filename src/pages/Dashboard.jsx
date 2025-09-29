@@ -64,7 +64,6 @@ const Dashboard = () => {
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [reminders, setReminders] = useState([]);
   const [invitations, setInvitations] = useState([]);
-  const [notifications, setNotifications] = useState([]);
   const [showTimeReport, setShowTimeReport] = useState(false);
   const [showMilestones, setShowMilestones] = useState(false);
   const [isMilestoneModalOpen, setIsMilestoneModalOpen] = useState(false);
@@ -218,16 +217,18 @@ const Dashboard = () => {
           aVal = a.due_date ? new Date(a.due_date) : new Date('9999-12-31');
           bVal = b.due_date ? new Date(b.due_date) : new Date('9999-12-31');
           break;
-        case 'priority':
+        case 'priority': {
           const priorityOrder = { High: 3, Medium: 2, Low: 1 };
           aVal = priorityOrder[a.priority || 'Medium'];
           bVal = priorityOrder[b.priority || 'Medium'];
           break;
-        case 'status':
+        }
+        case 'status': {
           const statusOrder = { 'To Do': 1, 'In Progress': 2, Done: 3 };
           aVal = statusOrder[a.status || 'To Do'];
           bVal = statusOrder[b.status || 'To Do'];
           break;
+        }
         case 'created_at':
         default:
           aVal = new Date(a.created_at);
@@ -829,17 +830,6 @@ const Dashboard = () => {
           {/* Reminders */}
           <Reminders reminders={reminders} />
 
-          {/* Real-time Notifications */}
-          {notifications.length > 0 && (
-            <div className="mb-4 p-4 bg-purple-100 border-l-4 border-purple-500 rounded-r-lg text-purple-800 text-sm">
-              <strong>Notifications:</strong>
-              <ul className="mt-2 space-y-1">
-                {notifications.map((notif, index) => (
-                  <li key={index}>{notif.message}</li>
-                ))}
-              </ul>
-            </div>
-          )}
 
           {/* Invitations */}
           {invitations.length > 0 && (
