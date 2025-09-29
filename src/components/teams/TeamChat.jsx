@@ -73,17 +73,22 @@ const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
+    e.stopPropagation();
+
     if (!newMessage.trim()) return;
 
+    const messageToSend = newMessage.trim();
     setLoading(true);
+
     try {
       await axios.post(`${API_BASE_URL}/teams/${team.id}/messages`, {
-        message: newMessage.trim()
+        message: messageToSend
       }, { withCredentials: true });
-      
+
       setNewMessage('');
     } catch (err) {
       console.error('Failed to send message:', err);
+      // Don't clear the message on error so user can retry
     } finally {
       setLoading(false);
     }
@@ -175,18 +180,25 @@ const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
 
         {/* Message Input */}
         <div className="border-t p-4">
-          <form onSubmit={handleSendMessage} className="flex space-x-2">
+          <form onSubmit={handleSendMessage} className="flex space-x-2" noValidate>
             <input
               type="text"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage(e);
+                }
+              }}
               placeholder="Type a message..."
               className="flex-1 p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               disabled={loading}
               maxLength="1000"
             />
             <button
-              type="submit"
+              type="button"
+              onClick={handleSendMessage}
               disabled={loading || !newMessage.trim()}
               className="bg-blue-500 text-white px-4 py-3 rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
             >
