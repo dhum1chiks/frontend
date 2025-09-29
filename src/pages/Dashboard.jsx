@@ -168,10 +168,11 @@ const Dashboard = () => {
     };
     fetchData();
 
-    // Socket connection
-    const newSocket = io('https://backend-xc4z.vercel.app', {
+    // Socket connection (disabled on Vercel)
+    const isVercel = window.location.hostname.includes('vercel.app');
+    const newSocket = isVercel ? null : io('https://backend-xc4z.vercel.app', {
       withCredentials: true,
-      transports: ['polling'], // Force polling for Vercel compatibility
+      transports: ['polling'], // Force polling for compatibility
     });
     setSocket(newSocket);
 
