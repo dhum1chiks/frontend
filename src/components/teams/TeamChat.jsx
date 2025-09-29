@@ -12,6 +12,15 @@ const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
+  const fetchMessages = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/teams/${team.id}/messages`, { withCredentials: true });
+      setMessages(res.data);
+    } catch (err) {
+      console.error('Failed to fetch messages:', err);
+    }
+  }, [team?.id]);
+
   useEffect(() => {
     if (isOpen && team) {
       fetchMessages();
@@ -61,15 +70,6 @@ const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
-
-  const fetchMessages = useCallback(async () => {
-    try {
-      const res = await axios.get(`${API_BASE_URL}/teams/${team.id}/messages`, { withCredentials: true });
-      setMessages(res.data);
-    } catch (err) {
-      console.error('Failed to fetch messages:', err);
-    }
-  }, [team?.id]);
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
