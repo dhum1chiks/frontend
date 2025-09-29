@@ -1,6 +1,6 @@
 import React from 'react';
 
-const API_BASE_URL = 'https://backend-xc4z.vercel.app/';
+const API_BASE_URL = 'https://backend-xc4z.vercel.app';
 
 const UserAvatar = ({ username, avatarUrl, size = 'w-10 h-10', textSize = 'text-base' }) => {
   let fullUrl = null;
