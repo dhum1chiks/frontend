@@ -10,7 +10,9 @@ const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [inputKey, setInputKey] = useState(0); // Force re-render of input
   const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
 
   const fetchMessages = useCallback(async () => {
     try {
@@ -67,6 +69,11 @@ const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
     scrollToBottom();
   }, [messages]);
 
+  // Debug: Log newMessage state changes
+  useEffect(() => {
+    console.log('newMessage state changed to:', newMessage);
+  }, [newMessage]);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -90,6 +97,11 @@ const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
     // Optimistic update - add message immediately
     setMessages(prev => [...prev, tempMessage]);
     setNewMessage('');
+    setInputKey(prev => prev + 1); // Force input re-render
+    if (inputRef.current) {
+      inputRef.current.value = ''; // Direct DOM manipulation as backup
+    }
+    console.log('Input cleared, newMessage state:', '');
     setLoading(true);
 
     try {
@@ -207,6 +219,8 @@ const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
         <div className="border-t p-4">
           <form onSubmit={handleSendMessage} className="flex space-x-2" noValidate>
             <input
+              key={inputKey}
+              ref={inputRef}
               type="text"
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
