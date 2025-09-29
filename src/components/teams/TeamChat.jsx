@@ -42,7 +42,14 @@ const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
       // Bind to new message events
       teamChannel.bind('new-message', (data) => {
         console.log('New message received:', data);
-        setMessages(prev => [...prev, data]);
+        setMessages(prev => {
+          // Check if message already exists to prevent duplicates
+          const exists = prev.some(msg => msg.id === data.id);
+          if (!exists) {
+            return [...prev, data];
+          }
+          return prev;
+        });
         scrollToBottom();
       });
 
@@ -85,17 +92,6 @@ const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
     if (!newMessage.trim()) return;
 
     const messageToSend = newMessage.trim();
-    const tempMessage = {
-      id: Date.now(), // Temporary ID
-      message: messageToSend,
-      user_id: currentUserId,
-      username: 'You', // Will be updated when real message comes back
-      created_at: new Date().toISOString(),
-      isOptimistic: true // Mark as optimistic update
-    };
-
-    // Optimistic update - add message immediately
-    setMessages(prev => [...prev, tempMessage]);
     setNewMessage('');
     setInputKey(prev => prev + 1); // Force input re-render
     if (inputRef.current) {
@@ -109,16 +105,19 @@ const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
         message: messageToSend
       }, { withCredentials: true });
 
-      // Replace optimistic message with real message from server
-      setMessages(prev => prev.map(msg =>
-        msg.isOptimistic ? response.data : msg
-      ));
+      // Add the real message from server (Socket.io will handle it for other users)
+      setMessages(prev => {
+        // Check if message already exists (from Socket.io)
+        const exists = prev.some(msg => msg.id === response.data.id);
+        if (!exists) {
+          return [...prev, response.data];
+        }
+        return prev;
+      });
 
       console.log('Message sent successfully:', response.data);
     } catch (err) {
       console.error('Failed to send message:', err);
-      // Remove optimistic message on error
-      setMessages(prev => prev.filter(msg => !msg.isOptimistic));
       setNewMessage(messageToSend); // Restore the message so user can retry
     } finally {
       setLoading(false);
@@ -178,16 +177,15 @@ const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
           ) : (
             messages.map((msg) => {
               const isCurrentUser = msg.user_id === currentUserId;
-              const isOptimistic = msg.isOptimistic;
               return (
                 <div key={msg.id} className={`flex ${isCurrentUser ? 'justify-end' : 'justify-start'} mb-4`}>
                   <div className={`flex flex-col ${isCurrentUser ? 'items-end' : 'items-start'} max-w-xs`}>
                     <div className={`flex items-center space-x-2 mb-1 ${isCurrentUser ? 'flex-row-reverse space-x-reverse' : ''}`}>
                       <span className="font-medium text-gray-800 text-sm">
-                        {isOptimistic ? 'You' : msg.username}
+                        {isCurrentUser ? 'You' : msg.username}
                       </span>
                       <span className="text-xs text-gray-500">{formatTime(msg.created_at)}</span>
-                      {isCurrentUser && !isOptimistic && (
+                      {isCurrentUser && (
                         <button
                           onClick={() => handleDeleteMessage(msg.id)}
                           className="text-red-500 hover:text-red-700"
@@ -196,13 +194,10 @@ const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
                           <Trash2 className="w-3 h-3" />
                         </button>
                       )}
-                      {isOptimistic && (
-                        <span className="text-xs text-gray-400">Sending...</span>
-                      )}
                     </div>
                     <div className={`rounded-lg p-3 text-sm ${
                       isCurrentUser
-                        ? `bg-purple-500 text-white ${isOptimistic ? 'opacity-70' : ''}`
+                        ? 'bg-purple-500 text-white'
                         : 'bg-blue-100 text-gray-800'
                     }`}>
                       {msg.message}
