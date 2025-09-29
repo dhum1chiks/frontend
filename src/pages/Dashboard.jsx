@@ -375,11 +375,15 @@ const Dashboard = () => {
   const handleTeamSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    console.log('Creating team with data:', teamForm);
     try {
       const response = await axios.post(`${API_BASE_URL}/teams`, teamForm, {
-        headers: { 'Content-Type': 'application/json' },
-        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
       });
+      console.log('Team creation response:', response.data);
 
       const newTeam = response.data;
       const membersResponse = await axios.get(`${API_BASE_URL}/teams/${newTeam.id}/members`, {
@@ -390,6 +394,7 @@ const Dashboard = () => {
       setIsTeamModalOpen(false);
       setTeamForm({ name: '' });
     } catch (error) {
+      console.error('Error creating team:', error);
       setError(error.response?.data?.error || 'Failed to create team');
     }
   };
