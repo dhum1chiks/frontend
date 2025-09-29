@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import io from 'socket.io-client';
 import { Menu, X, Plus, Search, Edit, Trash2, UserPlus, Trash, Target } from 'lucide-react';
 import InviteMemberModal from '../components/teams/InviteMemberModal';
 import AddMemberModal from '../components/teams/AddMemberModal';
@@ -65,7 +64,6 @@ const Dashboard = () => {
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [reminders, setReminders] = useState([]);
   const [invitations, setInvitations] = useState([]);
-  const [socket, setSocket] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [showTimeReport, setShowTimeReport] = useState(false);
   const [showMilestones, setShowMilestones] = useState(false);
@@ -167,33 +165,6 @@ const Dashboard = () => {
       }
     };
     fetchData();
-
-    // Socket connection
-    const newSocket = io('https://backend-xc4z.vercel.app', {
-      withCredentials: true,
-      transports: ['polling', 'websocket'], // Allow both polling and websocket
-    });
-    setSocket(newSocket);
-
-    newSocket.on('connect', () => {
-      console.log('Connected to server');
-      if (loggedInUserId) {
-        newSocket.emit('join-user', loggedInUserId);
-      }
-    });
-
-    newSocket.on('invitation-received', (data) => {
-      console.log('Invitation received:', data);
-      setNotifications(prev => [...prev, { type: 'invitation', ...data, timestamp: new Date() }]);
-      // Refresh invitations
-      axios.get(`${API_BASE_URL}/teams/invitations`, { withCredentials: true })
-        .then(res => setInvitations(res.data))
-        .catch(() => setInvitations([]));
-    });
-
-    return () => {
-      newSocket.disconnect();
-    };
   }, [navigate, loggedInUserId]);
 
   useEffect(() => {
@@ -1167,7 +1138,6 @@ const Dashboard = () => {
           setShowTeamChat(false);
           setSelectedTeamForChat(null);
         }}
-        socket={socket}
         currentUserId={loggedInUserId}
       />
     </div>

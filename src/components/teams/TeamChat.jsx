@@ -1,14 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import Pusher from 'pusher-js';
 import { Send, Trash2, MessageCircle } from 'lucide-react';
 import UserAvatar from '../users/UserAvatar';
 
 const API_BASE_URL = 'https://backend-xc4z.vercel.app';
 
-const TeamChat = ({ team, isOpen, onClose, socket, currentUserId }) => {
+const TeamChat = ({ team, isOpen, onClose, currentUserId }) => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pusher, setPusher] = useState(null);
+  const [channel, setChannel] = useState(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -18,26 +21,42 @@ const TeamChat = ({ team, isOpen, onClose, socket, currentUserId }) => {
   }, [isOpen, team]);
 
   useEffect(() => {
-    if (socket && isOpen) {
-      socket.on('team-message', (data) => {
-        if (data.teamId === team?.id) {
-          setMessages(prev => [...prev, data.message]);
-          scrollToBottom();
-        }
+    if (isOpen && team) {
+      // Initialize Pusher
+      const pusherInstance = new Pusher('c30f759d527210673c85', {
+        cluster: 'ap1'
       });
 
-      socket.on('message-deleted', (data) => {
-        if (data.teamId === team?.id) {
-          setMessages(prev => prev.filter(msg => msg.id !== data.messageId));
-        }
+      // Subscribe to team channel
+      const teamChannel = pusherInstance.subscribe(`team-${team.id}`);
+
+      // Bind to new message events
+      teamChannel.bind('new-message', (data) => {
+        console.log('New message received:', data);
+        setMessages(prev => [...prev, data]);
+        scrollToBottom();
       });
+
+      // Bind to message deleted events
+      teamChannel.bind('message-deleted', (data) => {
+        console.log('Message deleted:', data);
+        setMessages(prev => prev.filter(msg => msg.id !== data.messageId));
+      });
+
+      setPusher(pusherInstance);
+      setChannel(teamChannel);
 
       return () => {
-        socket.off('team-message');
-        socket.off('message-deleted');
+        if (teamChannel) {
+          teamChannel.unbind_all();
+          pusherInstance.unsubscribe(`team-${team.id}`);
+        }
+        if (pusherInstance) {
+          pusherInstance.disconnect();
+        }
       };
     }
-  }, [socket, isOpen, team]);
+  }, [isOpen, team]);
 
   useEffect(() => {
     scrollToBottom();
