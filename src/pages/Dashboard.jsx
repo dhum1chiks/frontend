@@ -171,6 +171,7 @@ const Dashboard = () => {
     // Socket connection
     const newSocket = io('https://backend-xc4z.vercel.app', {
       withCredentials: true,
+      transports: ['polling'], // Force polling for Vercel compatibility
     });
     setSocket(newSocket);
 
