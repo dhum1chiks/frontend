@@ -13,24 +13,6 @@ const TimeTracker = ({ taskId }) => {
   const [showLogs, setShowLogs] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    fetchTimeLogs();
-    fetchActiveTimer();
-  }, [taskId, fetchTimeLogs, fetchActiveTimer]);
-
-  useEffect(() => {
-    let interval;
-    if (activeTimer) {
-      interval = setInterval(() => {
-        const startTime = new Date(activeTimer.start_time);
-        const now = new Date();
-        const diffMinutes = Math.floor((now - startTime) / (1000 * 60));
-        setCurrentTime(diffMinutes);
-      }, 1000);
-    }
-    return () => clearInterval(interval);
-  }, [activeTimer]);
-
   const fetchTimeLogs = useCallback(async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/tasks/${taskId}/time`, { withCredentials: true });
@@ -53,6 +35,24 @@ const TimeTracker = ({ taskId }) => {
       console.error('Failed to fetch active timer:', err);
     }
   }, [taskId]);
+
+  useEffect(() => {
+    fetchTimeLogs();
+    fetchActiveTimer();
+  }, [taskId, fetchTimeLogs, fetchActiveTimer]);
+
+  useEffect(() => {
+    let interval;
+    if (activeTimer) {
+      interval = setInterval(() => {
+        const startTime = new Date(activeTimer.start_time);
+        const now = new Date();
+        const diffMinutes = Math.floor((now - startTime) / (1000 * 60));
+        setCurrentTime(diffMinutes);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [activeTimer]);
 
   const startTimer = async () => {
     setLoading(true);
