@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Clock, Calendar, User, BarChart3 } from 'lucide-react';
 
-const API_BASE_URL = 'https://backend-xc4z.vercel.app/';
+const API_BASE_URL = 'https://backend-xc4z.vercel.app';
 
 const TimeReport = ({ isOpen, onClose }) => {
   const [timeData, setTimeData] = useState([]);

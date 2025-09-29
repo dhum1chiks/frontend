@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
-const API_BASE_URL = 'https://backend-xc4z.vercel.app/';
+const API_BASE_URL = 'https://backend-xc4z.vercel.app';
 
 const InviteMemberModal = ({ teamId, isOpen, onClose }) => {
   const [email, setEmail] = useState('');

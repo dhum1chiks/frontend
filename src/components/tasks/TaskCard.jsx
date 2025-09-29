@@ -3,7 +3,7 @@ import axios from 'axios';
 import { ArrowRight } from 'lucide-react';
 import TimeTracker from './TimeTracker';
 
-const API_BASE_URL = 'https://backend-xc4z.vercel.app/';
+const API_BASE_URL = 'https://backend-xc4z.vercel.app';
 
 const TaskCard = ({ task, onEdit, onDelete, getAssigneeName }) => {
   const [attachments, setAttachments] = useState([]);

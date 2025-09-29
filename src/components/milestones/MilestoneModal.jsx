@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 
+const API_BASE_URL = 'https://backend-xc4z.vercel.app';
+
 const MilestoneModal = ({ isOpen, onClose, onSubmit, milestone, teams }) => {
   const [form, setForm] = useState({
     title: '',

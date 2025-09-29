@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Send, Trash2, MessageCircle } from 'lucide-react';
 import UserAvatar from '../users/UserAvatar';
 
-const API_BASE_URL = 'https://backend-xc4z.vercel.app/';
+const API_BASE_URL = 'https://backend-xc4z.vercel.app';
 
 const TeamChat = ({ team, isOpen, onClose, socket, currentUserId }) => {
   const [messages, setMessages] = useState([]);

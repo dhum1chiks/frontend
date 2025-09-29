@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { User, Mail, Phone, Globe, Bell, Palette, Camera, Save, X } from 'lucide-react';
 
-const API_BASE_URL = 'https://backend-xc4z.vercel.app/';
+const API_BASE_URL = 'https://backend-xc4z.vercel.app';
 
 const UserProfile = ({ isOpen, onClose }) => {
   const [profile, setProfile] = useState({

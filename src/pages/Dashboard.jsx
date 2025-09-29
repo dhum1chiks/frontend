@@ -23,7 +23,7 @@ import UserProfile from '../components/users/UserProfile';
 import UserAvatar from '../components/users/UserAvatar';
 import TeamChat from '../components/teams/TeamChat';
 
-const API_BASE_URL = 'https://backend-xc4z.vercel.app/';
+const API_BASE_URL = 'https://backend-xc4z.vercel.app';
 
 const Dashboard = () => {
   const [teams, setTeams] = useState([]);
@@ -169,7 +169,7 @@ const Dashboard = () => {
     fetchData();
 
     // Socket connection
-    const newSocket = io('https://backend-xc4z.vercel.app/', {
+    const newSocket = io('https://backend-xc4z.vercel.app', {
       withCredentials: true,
     });
     setSocket(newSocket);

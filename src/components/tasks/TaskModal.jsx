@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
-const API_BASE_URL = 'https://backend-xc4z.vercel.app/';
+const API_BASE_URL = 'https://backend-xc4z.vercel.app';
 
 const TaskModal = ({ isOpen, onClose, onSubmit, taskForm, setTaskForm, users, teams }) => {
   const [files, setFiles] = useState([]);
