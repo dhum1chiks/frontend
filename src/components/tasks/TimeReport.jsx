@@ -14,13 +14,6 @@ const TimeReport = ({ isOpen, onClose }) => {
     endDate: new Date().toISOString().split('T')[0]
   });
 
-  useEffect(() => {
-    if (isOpen) {
-      fetchTeams();
-      fetchTimeReport();
-    }
-  }, [isOpen, selectedTeam, dateRange]);
-
   const fetchTeams = async () => {
     try {
       const res = await axios.get(`${API_BASE_URL}/teams`, { withCredentials: true });
@@ -76,6 +69,13 @@ const TimeReport = ({ isOpen, onClose }) => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchTeams();
+      fetchTimeReport();
+    }
+  }, [isOpen, selectedTeam, dateRange]);
 
   const formatTime = (minutes) => {
     const hours = Math.floor(minutes / 60);

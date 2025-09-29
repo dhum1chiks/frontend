@@ -17,6 +17,15 @@ const TaskCard = ({ task, onEdit, onDelete, getAssigneeName }) => {
   const statusColor = task.status === 'Done' ? 'bg-green-500' : task.status === 'In Progress' ? 'bg-yellow-500' : 'bg-gray-500';
   const priorityColor = task.priority === 'High' ? 'text-red-600' : task.priority === 'Low' ? 'text-blue-600' : 'text-yellow-600';
 
+  const fetchComments = async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/tasks/${task.id}/comments`, { withCredentials: true });
+      setComments(res.data);
+    } catch (err) {
+      console.error('Failed to fetch comments:', err);
+    }
+  };
+
   useEffect(() => {
     const fetchAttachments = async () => {
       try {
@@ -28,15 +37,6 @@ const TaskCard = ({ task, onEdit, onDelete, getAssigneeName }) => {
     };
     fetchAttachments();
   }, [task.id]);
-
-  const fetchComments = async () => {
-    try {
-      const res = await axios.get(`${API_BASE_URL}/tasks/${task.id}/comments`, { withCredentials: true });
-      setComments(res.data);
-    } catch (err) {
-      console.error('Failed to fetch comments:', err);
-    }
-  };
 
   useEffect(() => {
     // Always fetch comments on mount for accurate count
